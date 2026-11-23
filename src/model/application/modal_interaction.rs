@@ -223,5 +223,5 @@ pub struct ModalInteractionData {
     /// The custom id of the modal
     pub custom_id: String,
     /// The components.
-    pub components: Vec<ActionRow>,
+    pub components: Vec<ModalSubmitComponent>,
 }

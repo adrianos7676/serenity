@@ -21,6 +21,7 @@ enum_number! {
         RoleSelect = 6,
         MentionableSelect = 7,
         ChannelSelect = 8,
+        Label = 18,
         _ => Unknown(u8),
     }
 }
@@ -38,6 +39,31 @@ pub struct ActionRow {
     /// The components of this ActionRow.
     #[serde(default)]
     pub components: Vec<ActionRowComponent>,
+}
+
+/// A label component used in modern modal layouts.
+#[cfg_attr(feature = "typesize", derive(typesize::derive::TypeSize))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct Label {
+    #[serde(rename = "type")]
+    pub kind: ComponentType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub component: ActionRowComponent,
+}
+
+/// A component received when submitting a modal.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum ModalSubmitComponent {
+    ActionRow(ActionRow),
+    Label(Label),
+    Unknown(Value),
 }
 
 /// A component which can be inside of an [`ActionRow`].
@@ -67,6 +93,9 @@ impl<'de> Deserialize<'de> for ActionRowComponent {
             | ComponentType::RoleSelect
             | ComponentType::MentionableSelect
             | ComponentType::ChannelSelect => from_value(value).map(ActionRowComponent::SelectMenu),
+            ComponentType::Label => {
+                return Err(DeError::custom("Label is not an ActionRow child"))
+            },
             ComponentType::ActionRow => {
                 return Err(DeError::custom("Invalid component type ActionRow"))
             },
@@ -75,6 +104,42 @@ impl<'de> Deserialize<'de> for ActionRowComponent {
             },
         }
         .map_err(DeError::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for ModalSubmitComponent {
+    fn deserialize<D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let map = JsonMap::deserialize(deserializer)?;
+        let raw_kind = map
+            .get("type")
+            .ok_or_else(|| DeError::missing_field("type"))?
+            .clone();
+        let value = Value::from(map);
+
+        match deserialize_val(raw_kind)? {
+            ComponentType::ActionRow => from_value(value).map(Self::ActionRow),
+            ComponentType::Label => from_value(value).map(Self::Label),
+            ComponentType::Unknown(_) => Ok(Self::Unknown(value)),
+            _ => {
+                return Ok(Self::Unknown(value));
+            }
+        }
+        .map_err(DeError::custom)
+    }
+}
+
+impl Serialize for ModalSubmitComponent {
+    fn serialize<S: Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        match self {
+            Self::ActionRow(component) => component.serialize(serializer),
+            Self::Label(component) => component.serialize(serializer),
+            Self::Unknown(value) => value.serialize(serializer),
+        }
     }
 }
 
@@ -227,6 +292,9 @@ pub struct SelectMenu {
     /// Whether select menu is disabled.
     #[serde(default)]
     pub disabled: bool,
+    /// Values selected by the user when submitting a modal.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
 }
 
 /// A select menu component options.

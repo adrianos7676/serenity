@@ -297,6 +297,9 @@ impl<'de> Deserialize<'de> for ComponentInteractionDataKind {
                 values: parse_values!(),
             },
             ComponentType::Unknown(x) => Self::Unknown(x),
+            ComponentType::Label => {
+                return Err(D::Error::custom("Label is not a message component"));
+            }
             x @ (ComponentType::ActionRow | ComponentType::InputText) => {
                 return Err(D::Error::custom(format_args!(
                     "invalid message component type in this context: {x:?}",
